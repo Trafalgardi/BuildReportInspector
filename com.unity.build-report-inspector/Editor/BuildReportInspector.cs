@@ -38,6 +38,9 @@ namespace Unity.BuildReportInspector
             AssetDatabase.RenameAsset(path, name);
             Selection.objects = new Object[] { AssetDatabase.LoadAssetAtPath<BuildReport>(buildReportDir + "/" + name) };
         }
+        
+        private int currentPage = 0;
+        private int itemsPerPage = 50;
 
         private BuildReport report
         {
@@ -661,51 +664,75 @@ namespace Unity.BuildReportInspector
 
         private void DisplayAssetsView(float vPos)
         {
-            switch (sourceDispMode)
+            // Пагинация только для режима "Size", где показывается плоский список
+            if (sourceDispMode == SourceAssetsDisplayMode.Size)
             {
-                case SourceAssetsDisplayMode.Size:
-                    ShowAssets(assets, ref vPos);
-                    break;
-                case SourceAssetsDisplayMode.OutputDataFiles:
-                    foreach (var outputFile in outputFiles)
-                    {
-                        if (!assetsFoldout.ContainsKey(outputFile.Key))
-                            assetsFoldout[outputFile.Key] = false;
+                int totalItems = assets.Count;
+                int totalPages = Mathf.CeilToInt((float)totalItems / itemsPerPage);
 
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Space(10);
-                        assetsFoldout[outputFile.Key] = EditorGUILayout.Foldout(assetsFoldout[outputFile.Key], outputFile.Key, DataFileStyle);
-                        GUILayout.Label(FormatSize((ulong)outputFile.Value), SizeStyle);
-                        GUILayout.EndHorizontal();
+                // Отрисовка страницы
+                var pageAssets = assets.Skip(currentPage * itemsPerPage).Take(itemsPerPage);
+                ShowAssets(pageAssets, ref vPos);
 
-                        vPos += k_LineHeight;
+                // Пагинация UI
+                EditorGUILayout.Space();
+                EditorGUILayout.BeginHorizontal();
+                GUI.enabled = (currentPage > 0);
+                if (GUILayout.Button("Prev", GUILayout.Width(60)))
+                    currentPage--;
+                GUI.enabled = (currentPage < totalPages - 1);
+                if (GUILayout.Button("Next", GUILayout.Width(60)))
+                    currentPage++;
+                GUI.enabled = true;
 
-                        if (assetsFoldout[outputFile.Key])
-                            ShowAssets(assets, ref vPos, outputFile.Key);
-                    }
-                    break;
-                case SourceAssetsDisplayMode.ImporterType:
-                    foreach (var outputFile in assetTypes)
-                    {
-                        if (!assetsFoldout.ContainsKey(outputFile.Key))
-                            assetsFoldout[outputFile.Key] = false;
+                GUILayout.FlexibleSpace();
+                GUILayout.Label($"Page {currentPage + 1} of {totalPages}");
+                EditorGUILayout.EndHorizontal();
+            }
+            else if (sourceDispMode == SourceAssetsDisplayMode.OutputDataFiles)
+            {
+                foreach (var outputFile in outputFiles)
+                {
+                    if (!assetsFoldout.ContainsKey(outputFile.Key))
+                        assetsFoldout[outputFile.Key] = false;
 
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Space(10);
-                        assetsFoldout[outputFile.Key] = EditorGUILayout.Foldout(assetsFoldout[outputFile.Key], outputFile.Key, DataFileStyle);
-                        GUILayout.Label(FormatSize((ulong)outputFile.Value), SizeStyle);
-                        GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Space(10);
+                    assetsFoldout[outputFile.Key] = EditorGUILayout.Foldout(assetsFoldout[outputFile.Key], outputFile.Key, DataFileStyle);
+                    GUILayout.Label(FormatSize((ulong)outputFile.Value), SizeStyle);
+                    GUILayout.EndHorizontal();
 
-                        vPos += k_LineHeight;
+                    vPos += k_LineHeight;
 
-                        if (assetsFoldout[outputFile.Key])
-                            ShowAssets(assets, ref vPos, null, outputFile.Key);
-                    }             
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
+                    if (assetsFoldout[outputFile.Key])
+                        ShowAssets(assets.Where(a => a.outputFile == outputFile.Key), ref vPos);
+                }
+            }
+            else if (sourceDispMode == SourceAssetsDisplayMode.ImporterType)
+            {
+                foreach (var typeGroup in assetTypes)
+                {
+                    if (!assetsFoldout.ContainsKey(typeGroup.Key))
+                        assetsFoldout[typeGroup.Key] = false;
+
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Space(10);
+                    assetsFoldout[typeGroup.Key] = EditorGUILayout.Foldout(assetsFoldout[typeGroup.Key], typeGroup.Key, DataFileStyle);
+                    GUILayout.Label(FormatSize((ulong)typeGroup.Value), SizeStyle);
+                    GUILayout.EndHorizontal();
+
+                    vPos += k_LineHeight;
+
+                    if (assetsFoldout[typeGroup.Key])
+                        ShowAssets(assets.Where(a => a.type == typeGroup.Key), ref vPos);
+                }
+            }
+            else
+            {
+                throw new ArgumentOutOfRangeException();
             }
         }
+
 
         private void OnOutputFilesGUI()
         {
